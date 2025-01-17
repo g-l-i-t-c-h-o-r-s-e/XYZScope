@@ -517,8 +517,10 @@ for (int i = 0; i < numSamplesToDraw; i++) {
 
   pgInfo.endDraw();
 
+  if (spoutOutput) {
   // Send Consolidated Info Stream via Spout
   spoutInfo.sendTexture(pgInfo);
+}
 }
 
 // Function to apply the mathematical functions input by the user
