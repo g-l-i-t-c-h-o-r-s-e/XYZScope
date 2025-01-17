@@ -11,6 +11,15 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 - Color Wheel
 - Etc... 
 
+# Hotkeys:
+- `Ctrl+Left/Right` = Adjust sample rate
+- `Ctrl+Up/Down` = Zoom in/out
+- `Ctrl+S` = Toggle Smooth curved lines/Sharp straight lines
+- `Ctrl+E` = Export OBJ
+- `Ctrl+P` = Freeze time
+- `+ or -` = Speed up/Slow down time
+- `Tab` = Toggle gui visibility
+
 # Showcase
 ![obs64_fPxcN9D2Wi](https://github.com/user-attachments/assets/511eb18e-6524-4d81-8e21-4041f89e8481)
 ![java_UUqkvI7xEr](https://github.com/user-attachments/assets/2a4ba9e5-4162-4bb7-b72f-8b4cbc599d1d)
