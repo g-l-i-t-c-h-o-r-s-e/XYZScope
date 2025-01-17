@@ -1,5 +1,5 @@
 # XYZScope
-A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation, OBJ model output, timescale control, Spout video output (OBS has spout input), and more.
+A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ model output, timescale control, Spout video output (OBS has spout input), and more.
 
 # TODO:
 - Add audio input
