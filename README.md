@@ -38,4 +38,4 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 <br>
 <br>
 # Very Special Thanks!~ 
-To [Jordan Collin](https://alchemicalscience.org/) and [Malcolm Bendall](https://www.howtube.com/channels/StrikeFoundationEarth#tab_all_videos) and the many people at [Cosmic Summit](https://www.youtube.com/watch?v=JsGz8G_VQJM) for their hard and inspirational work in this field, and on the open source research around The [P.U.M](https://www.ascensiondynamics.org/blog-noteworthy/plasmoid-unification-model)
+To [Jordan Collin](https://alchemicalscience.org/) and [Malcolm Bendall](https://www.howtube.com/channels/StrikeFoundationEarth#tab_all_videos) and the many people at [Cosmic Summit](https://www.youtube.com/watch?v=JsGz8G_VQJM) for their hard and inspirational work in this field, and on the [open source research](https://www.ascensiondynamics.org/blog-noteworthy/plasmoid-unification-model) around The [P.U.M](https://cdn.prod.website-files.com/5cc5e9c2dca8019de9074c56/6393fdf28871b165b87339ac_Plasmoid_Unification_Model_vertical.pdf)
