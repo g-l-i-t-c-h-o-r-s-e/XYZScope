@@ -1,5 +1,5 @@
 # XYZScope
-A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ model output, Timescale control, Spout video output (OBS has spout input), and more. <br><br>
+A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ model export, Timescale control, Spout video output (OBS has spout input), and more. <br><br>
 ~ Inspired by [oscope.js](https://ondras.github.io/oscope/)
 
 # TODO:
