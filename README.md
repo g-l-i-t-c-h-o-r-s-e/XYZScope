@@ -5,7 +5,7 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 # TODO:
 - Add audio input
 - Add audio output
-- Add animated 3d model output
+- Add _animated_ 3d model output
 - More documentation
 - Etc... 
 
