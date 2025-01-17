@@ -1,6 +1,12 @@
 # XYZScope
 Much documentation and more to come.
 
+# TODO:
+- Add audio input
+- Add audio output
+- Add animated 3d model output
+- More documentation
+- Etc... 
 
 # Showcase
 ![obs64_fPxcN9D2Wi](https://github.com/user-attachments/assets/511eb18e-6524-4d81-8e21-4041f89e8481)
