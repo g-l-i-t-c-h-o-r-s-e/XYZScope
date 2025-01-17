@@ -1,2 +1,2 @@
 # XYZScope
-XYZ+Time Oscilloscope in Processing
+Much documentation and more to come.
