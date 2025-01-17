@@ -21,5 +21,6 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 ![obs64_a4rdXlOUP3](https://github.com/user-attachments/assets/f7dc9f35-ce15-4116-ab4b-55970e801fa3)
 ![obs64_t1xTSczOUl](https://github.com/user-attachments/assets/99518e24-591a-47b9-902b-84231a523de9)
 ![obs64_3VNQEA91Ty](https://github.com/user-attachments/assets/c20424c9-4310-446d-aae0-0db31004072b)
-
-
+![obs64_19KLvSlqBD](https://github.com/user-attachments/assets/02d6f32e-490f-4067-affa-07ed7f1437c1)
+![obs64_inn62izQ45](https://github.com/user-attachments/assets/f87d8007-a828-4c54-b707-1b3c9180b4de)
+![obs64_PE0DPyqF87](https://github.com/user-attachments/assets/57508104-eec9-40f6-8ffe-0a9d3970d9fa)
