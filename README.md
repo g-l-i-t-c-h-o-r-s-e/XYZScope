@@ -1,6 +1,6 @@
 # XYZScope
 A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ model export, Timescale control, Spout video output (OBS has spout input), and more. <br><br>
-~ Inspired by [oscope.js](https://ondras.github.io/oscope/)
+~ Inspired by [oscope.js](https://ondras.github.io/oscope/)<br>
 
 # TODO:
 - Add audio input
@@ -35,3 +35,7 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 ![obs64_19KLvSlqBD](https://github.com/user-attachments/assets/02d6f32e-490f-4067-affa-07ed7f1437c1)
 ![obs64_inn62izQ45](https://github.com/user-attachments/assets/f87d8007-a828-4c54-b707-1b3c9180b4de)
 ![obs64_PE0DPyqF87](https://github.com/user-attachments/assets/57508104-eec9-40f6-8ffe-0a9d3970d9fa)
+<br>
+<br>
+# Very Special Thanks!~ 
+To [Jordan Collins](https://alchemicalscience.org/) and [Malcolm Bendall](https://www.howtube.com/channels/StrikeFoundationEarth#tab_all_videos) and the many people at [Cosmic Summit](https://www.youtube.com/watch?v=JsGz8G_VQJM) for their hard and inspirational work in this field, and on the open source research around The [P.U.M](https://www.ascensiondynamics.org/blog-noteworthy/plasmoid-unification-model)
