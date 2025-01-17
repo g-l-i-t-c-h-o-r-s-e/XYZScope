@@ -19,6 +19,8 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 - `Ctrl+P` = Freeze time
 - `+ or -` = Speed up/Slow down time
 - `Tab` = Toggle gui visibility
+- `Mousewheel` = Adjust time scale
+- `Shift+Mouse` = 3D Rotation of the waveform
 
 # Showcase
 ![obs64_fPxcN9D2Wi](https://github.com/user-attachments/assets/511eb18e-6524-4d81-8e21-4041f89e8481)
