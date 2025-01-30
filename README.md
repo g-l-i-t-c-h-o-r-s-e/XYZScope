@@ -9,7 +9,9 @@ A four dimensional (XYZ+Time) Oscilloscope, with 3D Rotation & Zoom/Pan, OBJ mod
 - More documentation
 - Refine code
 - Color Wheel
-- Etc... 
+- Etc...
+
+- # Check out the Android port [here](https://github.com/g-l-i-t-c-h-o-r-s-e/XYZScope/tree/android-14)!
 
 # Hotkeys:
 - `Ctrl+Left/Right` = Adjust sample rate
