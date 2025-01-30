@@ -1,30 +1,51 @@
-// Import the ControlP5 library for GUI components
+import android.content.Context;
+import android.os.PowerManager;
 import controlP5.*;
+import ketai.ui.*;
 
-// Import exp4j classes
-import net.objecthunter.exp4j.Expression;
-import net.objecthunter.exp4j.ExpressionBuilder;
-import net.objecthunter.exp4j.function.Function;
-
-// Import File class for file operations
-import java.io.File;
-import java.io.PrintWriter;
-import java.util.ArrayList;
-
-// Import KeyEvent for key code constants
-import java.awt.event.KeyEvent;
-
-// Import the Spout library for video output
-import spout.*; // Ensure you have the correct Spout library imported
-
-// ControlP5 object for the GUI
 ControlP5 cp5;
+KetaiKeyboard ketaiKeyboard; // Ketai keyboard for text input
+PowerManager.WakeLock wakeLock; // WakeLock to keep the screen on
+
+String xFunctionStr = "sin(2 * pi * freq1 * t + time)";
+String yFunctionStr = "cos(2 * pi * freq2 * t + time)";
+String zFunctionStr = "sin(2 * pi * freq3 * t + time)";
+
+int decimalPlaces = 5; // Default to 2 decimal places
+String formatNumber(double value, int decimalPlaces) {
+  return String.format("%." + decimalPlaces + "f", value);
+}
+
+boolean keyboardVisible = false; // Tracks whether the keyboard is open
+String activeTextField = ""; // Tracks which text field is active
+float uiScale = 2.0; // Global scaling factor for UI elements
+boolean customFieldsVisible = true; // Tracks visibility of custom text fields
+
+
+// Cursor variables
+int cursorPosition = 0; // Current cursor position
+int cursorBlinkRate = 30; // Cursor blink rate (frames)
+boolean cursorVisible = true; // Tracks cursor visibility
+int cursorX = 0;
+
+// Handle touch events for pinch-to-zoom and rotation
+int touchInteractionMode = 0; // 0 = none, 1 = pinch-to-zoom, 2 = rotation, 3 = GUI toggle
+boolean isInteractingWithSlider = false; // Tracks whether the user is interacting with a slider
+
+// References to the sliders
+Slider freq1Slider, freq2Slider, freq3Slider, sampleSlider, timeMultiplierSlider, enlargedTimeMultiplierSlider; 
+Slider activeSlider = null; // Track the currently active slider
+
+// Variables to store original slider sizes
+float originalSliderWidth = 200 * uiScale;
+float originalSliderHeight = 20 * uiScale;
+float enlargedSliderWidth = 400 * uiScale; // Double the original width
+float enlargedSliderHeight = 40 * uiScale; // Double the original height
 
 // Expression variables for exp4j
 Expression xExpression, yExpression, zExpression;
-
-// Function strings input by the user
-String xFunctionStr, yFunctionStr, zFunctionStr;
+Function squareFunc, sawFunc, triangleFunc, absSinFunc; // Custom functions for exp4j
+double phi = 1.61803398875; // Define the golden ratio phi
 
 // Visualization parameters
 int pixelsPerSample = 1;          // Controls the number of pixels per sample (zoom level)
@@ -34,7 +55,7 @@ float zoom = 1.0;                 // Controls the zoom level of the geometry
 boolean smoothLines = true;       // Toggle for smooth lines
 
 // Number of samples variables
-int baseNumSamples = 1024;        // Base number of samples set via text field
+int baseNumSamples = 256;        // Base number of samples set via text field
 int numSamples = baseNumSamples;   // Actual number of samples used in drawing
 
 // Arrays to store waveform vertices
@@ -45,11 +66,20 @@ float[] zVertices = new float[0];
 // PGraphics object for rendering
 PGraphics pg;
 
-// Frequency variables
-double freq1 = 1.0;
-double freq2 = 1.0;
-double freq3 = 1.0;               // Frequency for z-axis
-boolean independentFreqs = false; // Toggle for independent frequencies
+// Base frequency variables (unchanged by sliders)
+double baseFreq1 = 72.0D;
+double baseFreq2 = 43.2D;
+double baseFreq3 = 43.2D;
+
+//Default Frequency variables
+double freq1 = 0;
+double freq2 = 0;
+double freq3 = 0;
+
+// Frequency strings (displayed in text fields)
+String freq1Str = formatNumber(baseFreq1, decimalPlaces);
+String freq2Str = formatNumber(baseFreq2, decimalPlaces);
+String freq3Str = formatNumber(baseFreq3, decimalPlaces);
 
 // TimeScale toggles for each axis
 boolean applyTimeScaleX = false;
@@ -66,37 +96,21 @@ float timeMultiplier = 1.0;
 boolean freezeTime = false;
 double frozenTime = 0.0;
 
-// Variables for controlling rotation with Shift key
+// Variables for controlling rotation with touch controls
 float rotationX = 0;
 float rotationY = 0;
 int lastMouseX;
 int lastMouseY;
-boolean isShiftDown = false;
 
 // Variable to track GUI visibility
 boolean guiVisible = true;
 
-// Custom functions for exp4j
-Function squareFunc, sawFunc, triangleFunc, absSinFunc;
+// Variables for pinch-to-zoom
+float initialPinchDistance = 0; // Initial distance between two touch points
+float initialZoom = 1.0; // Initial zoom level when pinch starts
 
-// Spout variables
-boolean spoutOutput = false; // Toggle for Spout output
-Spout spout;                 // Spout object for main visualization
-
-// Consolidated PGraphics and Spout sender for additional information
-PGraphics pgInfo;
-Spout spoutInfo;
-
-// Dimensions for the additional stream
-int infoStreamWidth = 400;
-int infoStreamHeight = 200;
-
-// Define the golden ratio phi
-double phi = 1.61803398875;
-
-// Setup function
 void setup() {
-  size(1280, 800, P3D);
+  fullScreen(P3D);
   background(0);
   lastMouseX = mouseX;
   lastMouseY = mouseY;
@@ -106,136 +120,105 @@ void setup() {
 
   // Enable auto-draw for ControlP5
   cp5.setAutoDraw(true);
+  println(freq3Str); // here is where 
 
-  // Create text fields for x(t), y(t), z(t) functions
-  cp5.addTextfield("xFunction")
-     .setPosition(20, 20)
-     .setSize(300, 30)
-     .align(0,0,0,0)
-     .setLabel("x Function")
-     .setText("sin(2 * pi * freq1 * t + time)");
-
-  cp5.addTextfield("yFunction")
-     .setPosition(20, 60)
-     .setSize(300, 30)
-     .align(0,0,0,0)
-     .setLabel("y Function")
-     .setText("cos(2 * pi * freq2 * t + time)");
-
-  cp5.addTextfield("zFunction")
-     .setPosition(20, 100)
-     .setSize(300, 30)
-     .align(0,0,0,0)
-     .setLabel("z Function")
-     .setText("sin(2 * pi * freq3 * t + time)");
 
   // Add a button to apply the functions
   cp5.addButton("applyFunctions")
      .setLabel("Apply Functions")
-     .setPosition(140, 140)
-     .setSize(100, 30);
-
-  // Add labels, textfields, sliders, and toggles for freq1, freq2, and freq3
-  cp5.addTextlabel("labelFreq1")
-     .setText("Frequency X:")
-     .setPosition(20, 180);
-
-  cp5.addTextfield("freq1Field")
-     .setPosition(110, 180)
-     .setSize(100, 20)
-     .setText("1.0000000000")
-     .setLabel("")
-     .setAutoClear(false);
-
-  cp5.addSlider("freq1Slider")
-     .setPosition(220, 180)
-     .setSize(140, 20)
-     .setRange(0.1, 10)
-     .setLabel("")
-     .setValue((float) freq1);
-
-  cp5.addToggle("applyTimeScaleX")
-     .setPosition(370, 180)
-     .setSize(20, 20)
-     .setValue(applyTimeScaleX)
-     .align(LEFT, LEFT,LEFT,BOTTOM)
-     .setLabel("TimeScale X");
+     .setPosition((int)(140 * uiScale), (int)(140 * uiScale)) // Cast to int
+     .setLock(true)
+     .setSize((int)(100 * uiScale), (int)(30 * uiScale)); // Cast to int
+  
+  // Add the toggle for curved or straight lines
+  cp5.addToggle("smoothLines")
+     .setLabel("Curved/Straight Lines")
+     .setPosition((int)(20 * uiScale), (int)(270 * uiScale)) // Cast to int
+     .setSize((int)(20 * uiScale), (int)(20 * uiScale)) // Cast to int
+     .setLock(true)
+     .setValue(true);
      
-
-  cp5.addTextlabel("labelFreq2")
-     .setText("Frequency Y:")
-     .setPosition(20, 210);
-
-  cp5.addTextfield("freq2Field")
-     .setPosition(110, 210)
-     .setSize(100, 20)
-     .setText("1.0000000000")
-     .setLabel("")
-     .setAutoClear(false);
-
-  cp5.addSlider("freq2Slider")
-     .setPosition(220, 210)
-     .setSize(140, 20)
-     .setRange(0.1, 10)
-     .setLabel("")
-     .setValue((float) freq2);
-
-  cp5.addToggle("applyTimeScaleY")
-     .setPosition(370, 210)
-     .setSize(20, 20)
-     .setValue(applyTimeScaleY)
-     .align(LEFT, LEFT,LEFT,BOTTOM)
-     .setLabel("TimeScale Y");
-
-  cp5.addTextlabel("labelFreq3")
-     .setText("Frequency Z:")
-     .setPosition(20, 240);
-
-  cp5.addTextfield("freq3Field")
-     .setPosition(110, 240)
-     .setSize(100, 20)
-     .setText("1.0000000000")
-     .setLabel("")
-     .setAutoClear(false);
-
-  cp5.addSlider("freq3Slider")
-     .setPosition(220, 240)
-     .setSize(140, 20)
-     .setRange(0.1, 10)
-     .setLabel("")
-     .setValue((float) freq3);
-
-  cp5.addToggle("applyTimeScaleZ")
-     .setPosition(370, 240)
-     .setSize(20, 20)
-     .setValue(applyTimeScaleZ)
-     .align(LEFT, LEFT,LEFT,BOTTOM)
-     .setLabel("TimeScale Z");
-
-  // Add the toggle for independent frequencies
-  cp5.addToggle("independentFreqs")
-     .setLabel("Independent Frequencies")
-     .setPosition(20, 270)
-     .setSize(20, 20)
-     .setValue(false);
-
+  // Add a toggle button for freezeTime
+  cp5.addToggle("freezeTimeToggle")
+     .setLabel("Freeze Time")
+     .setPosition((int)(20 * uiScale), (int)(440 * uiScale)) // Position below the sampleSlider
+     .setSize((int)(20 * uiScale), (int)(20 * uiScale)) // Same size as the smoothLines toggle
+     .setLock(true)
+     .setValue(freezeTime); // Set the initial value to match the freezeTime variable
+     
+  // Add a toggle for enlarging sliders during interaction
+  cp5.addToggle("enlargeSlidersToggle")
+     .setLabel("Enlarge Sliders")
+     .setPosition((int)(20 * uiScale), (int)(470 * uiScale)) // Position below the freezeTime toggle
+     .setSize((int)(20 * uiScale), (int)(20 * uiScale)) // Same size as other toggles
+     .setLock(true)
+     .setValue(false); // Default to off
+  
+  // Add text field for "Pixels Per Sample"
   cp5.addTextfield("Pixels Per Sample")
-     .setPosition(150, 290)
-     .setSize(60, 20)
+     .setPosition((int)(150 * uiScale), (int)(290 * uiScale)) // Cast to int
+     .setSize((int)(60 * uiScale), (int)(20 * uiScale)) // Cast to int
      .setText(str(baseNumSamples))
      .setAutoClear(false);
+  
+  // Add sliders for frequency multipliers
+  freq1Slider = cp5.addSlider("freq1Multiplier")
+     .setPosition((int)(20 * uiScale), (int)(320 * uiScale))
+     .setSize((int)(200 * uiScale), (int)(20 * uiScale))
+     .setRange(0.1, 10)
+     .setValue(1.0)
+     .setLock(true)
+     .setLabel("Freq1 Multiplier");
 
-  // Add toggle for Spout output
-  cp5.addToggle("spoutOutput")
-     .setLabel("Enable Spout Output")
-     .setPosition(20, 320)
-     .setSize(20, 20)
-     .setValue(spoutOutput);
+  freq2Slider = cp5.addSlider("freq2Multiplier")
+     .setPosition((int)(20 * uiScale), (int)(350 * uiScale))
+     .setSize((int)(200 * uiScale), (int)(20 * uiScale))
+     .setRange(0.1, 10)
+     .setValue(1.0)
+     .setLock(true)
+     .setLabel("Freq2 Multiplier");
+
+  freq3Slider = cp5.addSlider("freq3Multiplier")
+     .setPosition((int)(20 * uiScale), (int)(380 * uiScale))
+     .setSize((int)(200 * uiScale), (int)(20 * uiScale))
+     .setRange(0.1, 10)
+     .setValue(1.0)
+     .setLock(true)
+     .setLabel("Freq3 Multiplier");
+     
+  sampleSlider = cp5.addSlider("numSamplesMultiplier")
+     .setPosition((int)(20 * uiScale), (int)(410 * uiScale)) // Position below the frequency sliders
+     .setSize((int)(200 * uiScale), (int)(20 * uiScale))
+     .setRange(0.1, 10) // Set the range of the multiplier
+     .setValue(1.0) // Default value
+     .setLock(true)
+     .setLabel("Samples Multiplier");
+     
+  timeMultiplierSlider = cp5.addSlider("timeMultiplier")
+       .setPosition((int)(250 * uiScale), (int)(200 * uiScale)) // Position to the right of other sliders
+       .setSize((int)(20 * uiScale), (int)(200 * uiScale)) // Vertical slider (width, height)
+       .setRange(0.1, 10.0) // Range from -500 to 500
+       .setValue(1.0) // Start in the middle
+       .setLock(true)
+       .setLabel("Time Multiplier")
+       .setSliderMode(Slider.FLEXIBLE); // Make it vertical
+       
+  // Enlarged timeMultiplierSlider (hidden initially)
+  enlargedTimeMultiplierSlider = cp5.addSlider("enlargedTimeMultiplier")
+       .setPosition((int)(250 * uiScale), (int)(200 * uiScale - (enlargedSliderHeight - originalSliderHeight))) // Adjust y position to grow upwards
+       .setSize((int)(40 * uiScale), (int)(400 * uiScale)) // Larger size
+       .setRange(0.1, 10.0)
+       .setValue(1.0)
+       .setLock(true)
+       .setLabel("Time Multiplier (Enlarged)")
+       .setSliderMode(Slider.FLEXIBLE) // Make it vertical
+       .setVisible(false); // Hide initially
+
 
   // Initialize default functions
-  xFunctionStr = cp5.get(Textfield.class, "xFunction").getText();
-  yFunctionStr = cp5.get(Textfield.class, "yFunction").getText();
-  zFunctionStr = cp5.get(Textfield.class, "zFunction").getText();
+  xFunctionStr = "sin(2 * pi * freq1 * t + time)";
+  yFunctionStr = "cos(2 * pi * freq2 * t + time)";
+  zFunctionStr = "sin(2 * pi * freq3 * t + time)";
 
   // Define custom functions
   squareFunc = new Function("square", 1) {
@@ -269,57 +252,58 @@ void setup() {
     }
   };
 
-
-// Build expressions including 'time', 'freq3', and 'phi' variables
-try {
-  xExpression = new ExpressionBuilder(xFunctionStr)
-                  .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
-                  .function(squareFunc)
-                  .function(sawFunc)
-                  .function(triangleFunc)
-                  .function(absSinFunc)
-                  .build();
-  yExpression = new ExpressionBuilder(yFunctionStr)
-                  .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
-                  .function(squareFunc)
-                  .function(sawFunc)
-                  .function(triangleFunc)
-                  .function(absSinFunc)
-                  .build();
-  zExpression = new ExpressionBuilder(zFunctionStr)
-                  .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
-                  .function(squareFunc)
-                  .function(sawFunc)
-                  .function(triangleFunc)
-                  .function(absSinFunc)
-                  .build();
-} catch (Exception e) {
-  println("Error compiling functions: " + e.getMessage());
-}
-
+  // Build expressions including 'time', 'freq3', and 'phi' variables
+  try {
+    xExpression = new ExpressionBuilder(xFunctionStr)
+                    .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
+                    .function(squareFunc)
+                    .function(sawFunc)
+                    .function(triangleFunc)
+                    .function(absSinFunc)
+                    .build();
+    yExpression = new ExpressionBuilder(yFunctionStr)
+                    .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
+                    .function(squareFunc)
+                    .function(sawFunc)
+                    .function(triangleFunc)
+                    .function(absSinFunc)
+                    .build();
+    zExpression = new ExpressionBuilder(zFunctionStr)
+                    .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
+                    .function(squareFunc)
+                    .function(sawFunc)
+                    .function(triangleFunc)
+                    .function(absSinFunc)
+                    .build();
+  } catch (Exception e) {
+    println("Error compiling functions: " + e.getMessage());
+  }
 
   // Create PGraphics object with the same resolution as the window
-  pg = createGraphics(1280, 800, P3D);
-
-  // Initialize Spout for main visualization
-  spout = new Spout(this);
-  spout.createSender("ProcessingSpoutMainSender", 1280, 800);
-
-  // Initialize consolidated PGraphics for additional information
-  pgInfo = createGraphics(infoStreamWidth, infoStreamHeight, P2D);
-
-  // Initialize consolidated Spout sender for additional information
-  spoutInfo = new Spout(this);
-  spoutInfo.createSender("InfoStream", infoStreamWidth, infoStreamHeight);
+  pg = createGraphics(width, height, P3D);
 
   // Set up smooth lines
   smooth();
 
   // All controllers are now initialized
   controllersInitialized = true;
+  
+  // Keep the screen on
+  Context context = getContext(); // Get the Android context
+  PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+  wakeLock = powerManager.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "Processing:ScreenOn");
+  wakeLock.acquire();
 }
 
-// Draw function
+
+// Method to handle the freezeTime toggle event
+public void freezeTimeToggle(boolean theValue) {
+  freezeTime = theValue; // Update the freezeTime variable
+  if (freezeTime) {
+    frozenTime = millis() / 1000.0 * timeMultiplier; // Store the current time when freezing
+  }
+}
+
 void draw() {
   background(0);
 
@@ -331,21 +315,14 @@ void draw() {
   pg.translate(pg.width / 2, pg.height / 2, -200 * zoom);
   pg.scale(zoom);
 
-  if (isShiftDown) {
-    float deltaX = mouseX - lastMouseX;
-    float deltaY = mouseY - lastMouseY;
-    rotationY += deltaX * 0.01; // Adjust sensitivity as needed
-    rotationX += deltaY * 0.01;
-  }
-
   pg.rotateX(rotationX);
   pg.rotateY(rotationY);
 
   pg.stroke(0, 255, 0);
   pg.noFill();
 
-  // Determine the number of samples to draw based on pixelsPerSample
-  int numSamplesToDraw = max(1, baseNumSamples / pixelsPerSample);
+  // Determine the number of samples to draw based on pixelsPerSample and the multiplier
+  int numSamplesToDraw = max(1, (int)(baseNumSamples / pixelsPerSample * cp5.getController("numSamplesMultiplier").getValue()));
 
   // Update vertices
   xVertices = new float[numSamplesToDraw];
@@ -360,36 +337,45 @@ void draw() {
     currentTime = millis() / 1000.0 * timeMultiplier;
   }
 
-for (int i = 0; i < numSamplesToDraw; i++) {
-  double t = i / (double) numSamplesToDraw; // t from 0 to 1
 
-  // Set variables and evaluate expressions
-  xExpression.setVariable("t", t)
-             .setVariable("time", currentTime)
-             .setVariable("freq1", freq1)
-             .setVariable("freq2", freq2)
-             .setVariable("freq3", freq3)
-             .setVariable("pi", Math.PI)
-             .setVariable("e", Math.E)
-             .setVariable("phi", phi);
+  // "t" is a normalized parameter that ranges from 0 to 1
+  // Its used to parameterize mathematical functions for generating coordinates.
+  // Its progression ensures smooth transitions and animations in the visualization.
+  // "t" is calculated as i / (double) numSamplesToDraw, where i is the current iteration index in the loop, 
+  // and numSamplesToDraw is the total number of samples to be drawn. 
+  // This ensures that t ranges from 0 (at the start of the loop) to 1 (at the end of the loop).
+  // "t" acts as a parameter that progresses uniformly through the range of samples. 
+  // Its often used in mathematical functions to generate smooth transitions or animations.
+  for (int i = 0; i < numSamplesToDraw; i++) {
+    double t = i / (double) numSamplesToDraw; // t from 0 to 1
 
-  yExpression.setVariable("t", t)
-             .setVariable("time", currentTime)
-             .setVariable("freq1", freq1)
-             .setVariable("freq2", freq2)
-             .setVariable("freq3", freq3)
-             .setVariable("pi", Math.PI)
-             .setVariable("e", Math.E)
-             .setVariable("phi", phi);
+    // Set variables and evaluate expressions
+    xExpression.setVariable("t", t)
+               .setVariable("time", currentTime)
+               .setVariable("freq1", freq1)
+               .setVariable("freq2", freq2)
+               .setVariable("freq3", freq3)
+               .setVariable("pi", Math.PI)
+               .setVariable("e", Math.E)
+               .setVariable("phi", phi);
 
-  zExpression.setVariable("t", t)
-             .setVariable("time", currentTime)
-             .setVariable("freq1", freq1)
-             .setVariable("freq2", freq2)
-             .setVariable("freq3", freq3)
-             .setVariable("pi", Math.PI)
-             .setVariable("e", Math.E)
-             .setVariable("phi", phi);
+    yExpression.setVariable("t", t)
+               .setVariable("time", currentTime)
+               .setVariable("freq1", freq1)
+               .setVariable("freq2", freq2)
+               .setVariable("freq3", freq3)
+               .setVariable("pi", Math.PI)
+               .setVariable("e", Math.E)
+               .setVariable("phi", phi);
+
+    zExpression.setVariable("t", t)
+               .setVariable("time", currentTime)
+               .setVariable("freq1", freq1)
+               .setVariable("freq2", freq2)
+               .setVariable("freq3", freq3)
+               .setVariable("pi", Math.PI)
+               .setVariable("e", Math.E)
+               .setVariable("phi", phi);
 
     double x = 0, y = 0, z = 0;
     try {
@@ -455,11 +441,6 @@ for (int i = 0; i < numSamplesToDraw; i++) {
   // Display the main PGraphics on screen
   image(pg, 0, 0);
 
-  // Send the main PGraphics via Spout if enabled
-  if (spoutOutput) {
-    spout.sendTexture(pg);
-  }
-
   // Update last mouse positions
   lastMouseX = mouseX;
   lastMouseY = mouseY;
@@ -469,276 +450,288 @@ for (int i = 0; i < numSamplesToDraw; i++) {
     cp5.draw();
   }
 
-  // Render Consolidated Info Stream
-  pgInfo.beginDraw();
-  pgInfo.background(0);
-  pgInfo.fill(255);
-  pgInfo.textSize(13);
-  pgInfo.textAlign(LEFT, TOP);
+  // Draw custom text fields for x, y, z functions and frequencies if visible
+  if (customFieldsVisible) {
+    fill(255);
+    textSize(16 * uiScale);
+    text("x(t): " + xFunctionStr, 20 * uiScale, 40 * uiScale);
+    text("y(t): " + yFunctionStr, 20 * uiScale, 80 * uiScale);
+    text("z(t): " + zFunctionStr, 20 * uiScale, 120 * uiScale);
 
-  // Prepare formatted frequency strings with leading zeros
-  String freq1Str = String.format("%.10f", freq1);
-  String freq2Str = String.format("%.10f", freq2);
-  String freq3Str = String.format("%.10f", freq3);
+    text("freq1: " + freq1Str, 20 * uiScale, 160 * uiScale);
+    text("freq2: " + freq2Str, 20 * uiScale, 200 * uiScale);
+    text("freq3: " + freq3Str, 20 * uiScale, 240 * uiScale);
+  }
 
-  // Prepare formatted time string with leading zeros
-  String timeStr = String.format("%.10f", currentTime);
+  // Draw the cursor
+  if (keyboardVisible && cursorVisible) {
+    int cursorX = (int)(20 * uiScale);
+    int cursorY = (int)(40 * uiScale); // Default y position for xFunction
+    String activeText = "";
+    String staticPrefix = ""; // Static text prefix for each field
+    if (activeTextField.equals("xFunction")) {
+      activeText = xFunctionStr;
+      staticPrefix = "x(t): ";
+      cursorY = (int)(40 * uiScale); // y position for xFunction
+    } else if (activeTextField.equals("yFunction")) {
+      activeText = yFunctionStr;
+      staticPrefix = "y(t): ";
+      cursorY = (int)(80 * uiScale); // y position for yFunction
+    } else if (activeTextField.equals("zFunction")) {
+      activeText = zFunctionStr;
+      staticPrefix = "z(t): ";
+      cursorY = (int)(120 * uiScale); // y position for zFunction
+    } else if (activeTextField.equals("freq1")) {
+      activeText = freq1Str;
+      staticPrefix = "freq1: ";
+      cursorY = (int)(160 * uiScale); // y position for freq1
+    } else if (activeTextField.equals("freq2")) {
+      activeText = freq2Str;
+      staticPrefix = "freq2: ";
+      cursorY = (int)(200 * uiScale); // y position for freq2
+    } else if (activeTextField.equals("freq3")) {
+      activeText = freq3Str;
+      staticPrefix = "freq3: ";
+      cursorY = (int)(240 * uiScale); // y position for freq3
+    }
+  
+    // Calculate the cursor's horizontal position
+    textSize(16 * uiScale); // Set the text size to match the scaled UI
+    float prefixWidth = textWidth(staticPrefix); // Width of the static prefix
+    cursorX = (int)(20 * uiScale + prefixWidth + textWidth(activeText.substring(0, cursorPosition)));
+  
+    // Ensure the cursor stays within the text field bounds
+    int textFieldWidth = (int)(300 * uiScale); // Width of the text field
+    if (cursorX > (int)(20 * uiScale + textFieldWidth)) {
+      cursorX = (int)(20 * uiScale + textFieldWidth); // Constrain cursor to the right edge of the text field
+    }
+  
+    // Draw the cursor
+    stroke(255);
+    line(cursorX, cursorY, cursorX, cursorY - (int)(20 * uiScale)); // Draw cursor at the correct y position
+  }
 
-  // Prepare formatted timeScale strings with leading zeros
-  String timeScaleXStr = applyTimeScaleX ? String.format("%.10f", timeScale) : "1.0000000000";
-  String timeScaleYStr = applyTimeScaleY ? String.format("%.10f", timeScale) : "1.0000000000";
-  String timeScaleZStr = applyTimeScaleZ ? String.format("%.10f", timeScale) : "1.0000000000";
-
-  // Prepare applied pixelsPerSample value
-  String appliedPixelsPerSampleStr = String.format("%d", numSamplesToDraw);
-
-  // Combine left information (expressions and frequencies)
-  String leftInfoText = "x(t) = " + xFunctionStr + "\n" +
-                        "y(t) = " + yFunctionStr + "\n" +
-                        "z(t) = " + zFunctionStr + "\n\n" +
-                        "Frequency X: " + freq1Str + "\n" +
-                        "Frequency Y: " + freq2Str + "\n" +
-                        "Frequency Z: " + freq3Str;
-
-  // Combine right information (time, timescales, and applied pixelsPerSample)
-  String rightInfoText = "Current Time: " + timeStr + "\n" +
-                         "TimeScale X: " + timeScaleXStr + "\n" +
-                         "TimeScale Y: " + timeScaleYStr + "\n" +
-                         "TimeScale Z: " + timeScaleZStr + "\n\n" +
-                         "Pixels Per Sample: " + appliedPixelsPerSampleStr;
-
-  // Render left info
-  pgInfo.textAlign(LEFT, TOP);
-  pgInfo.text(leftInfoText, 10, 10);
-
-  // Render right info
-  pgInfo.textAlign(RIGHT, TOP);
-  pgInfo.text(rightInfoText, infoStreamWidth - 10, 70);
-
-  pgInfo.endDraw();
-
-  if (spoutOutput) {
-  // Send Consolidated Info Stream via Spout
-  spoutInfo.sendTexture(pgInfo);
+  // Blink the cursor
+  if (frameCount % cursorBlinkRate == 0) {
+    cursorVisible = !cursorVisible;
+  }
 }
-}
 
-// Function to apply the mathematical functions input by the user
 void applyFunctions() {
-  xFunctionStr = cp5.get(Textfield.class, "xFunction").getText();
-  yFunctionStr = cp5.get(Textfield.class, "yFunction").getText();
-  zFunctionStr = cp5.get(Textfield.class, "zFunction").getText();
+  try {
+    // Rebuild expressions with updated functions
+    xExpression = new ExpressionBuilder(xFunctionStr)
+                    .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
+                    .function(squareFunc)
+                    .function(sawFunc)
+                    .function(triangleFunc)
+                    .function(absSinFunc)
+                    .build();
+    yExpression = new ExpressionBuilder(yFunctionStr)
+                    .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
+                    .function(squareFunc)
+                    .function(sawFunc)
+                    .function(triangleFunc)
+                    .function(absSinFunc)
+                    .build();
+    zExpression = new ExpressionBuilder(zFunctionStr)
+                    .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
+                    .function(squareFunc)
+                    .function(sawFunc)
+                    .function(triangleFunc)
+                    .function(absSinFunc)
+                    .build();
+  } catch (Exception e) {
+    println("Error compiling functions: " + e.getMessage());
+  }
+  println(xFunctionStr);
 
-try {
-  xExpression = new ExpressionBuilder(xFunctionStr)
-                  .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
-                  .function(squareFunc)
-                  .function(sawFunc)
-                  .function(triangleFunc)
-                  .function(absSinFunc)
-                  .build();
-  yExpression = new ExpressionBuilder(yFunctionStr)
-                  .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
-                  .function(squareFunc)
-                  .function(sawFunc)
-                  .function(triangleFunc)
-                  .function(absSinFunc)
-                  .build();
-  zExpression = new ExpressionBuilder(zFunctionStr)
-                  .variables("t", "time", "freq1", "freq2", "freq3", "pi", "e", "phi")
-                  .function(squareFunc)
-                  .function(sawFunc)
-                  .function(triangleFunc)
-                  .function(absSinFunc)
-                  .build();
-} catch (Exception e) {
-  println("Error compiling functions: " + e.getMessage());
-}
+  // Update base frequencies from the text fields
+  baseFreq1 = parseFrequency(freq1Str, baseFreq1); // Get the base frequency from the text field
+  baseFreq2 = parseFrequency(freq2Str, baseFreq2); // Get the base frequency from the text field
+  baseFreq3 = parseFrequency(freq3Str, baseFreq3); // Get the base frequency from the text field
 
+  // Apply the frequency multipliers from the sliders and truncate the result
+  freq1 = truncate(baseFreq1 * cp5.getController("freq1Multiplier").getValue(), decimalPlaces);
+  freq2 = truncate(baseFreq2 * cp5.getController("freq2Multiplier").getValue(), decimalPlaces);
+  freq3 = truncate(baseFreq3 * cp5.getController("freq3Multiplier").getValue(), decimalPlaces);
+
+  // Format the frequency strings to the desired number of decimal places
+  // freq1Str = formatNumber(baseFreq1, decimalPlaces); // Display base frequency
+  // freq2Str = formatNumber(baseFreq2, decimalPlaces); // Display base frequency
+  // freq3Str = formatNumber(baseFreq3, decimalPlaces); // Display base frequency
 
   println("Functions updated:");
   println("x(t) = " + xFunctionStr);
   println("y(t) = " + yFunctionStr);
   println("z(t) = " + zFunctionStr);
+  println("freq1 = " + freq1);
+  println("freq2 = " + freq2);
+  println("freq3 = " + freq3);
 }
 
-// Handle key presses for interactivity
+// Handle touch events to open/close the keyboard
+void mousePressed() {
+  // Check if the user tapped on the x(t) field
+  if (mouseX > 20 * uiScale && mouseX < 320 * uiScale && mouseY > 20 * uiScale && mouseY < 40 * uiScale) {
+    if (!activeTextField.equals("xFunction")) {
+      activeTextField = "xFunction";
+      ketaiKeyboard.show(this);
+      keyboardVisible = true;
+    }
+    cursorPosition = getCursorPosition(xFunctionStr, (int)(mouseX - 20 * uiScale), xFunctionStr);
+  }
+  // Check if the user tapped on the y(t) field
+  else if (mouseX > 20 * uiScale && mouseX < 320 * uiScale && mouseY > 60 * uiScale && mouseY < 80 * uiScale) {
+    if (!activeTextField.equals("yFunction")) {
+      activeTextField = "yFunction";
+      ketaiKeyboard.show(this);
+      keyboardVisible = true;
+    }
+    cursorPosition = getCursorPosition(yFunctionStr, (int)(mouseX - 20 * uiScale), yFunctionStr);
+  }
+  // Check if the user tapped on the z(t) field
+  else if (mouseX > 20 * uiScale && mouseX < 320 * uiScale && mouseY > 100 * uiScale && mouseY < 120 * uiScale) {
+    if (!activeTextField.equals("zFunction")) {
+      activeTextField = "zFunction";
+      ketaiKeyboard.show(this);
+      keyboardVisible = true;
+    }
+    cursorPosition = getCursorPosition(zFunctionStr, (int)(mouseX - 20 * uiScale), zFunctionStr);
+  }
+  // Check if the user tapped on the freq1 field
+  else if (mouseX > 20 * uiScale && mouseX < 320 * uiScale && mouseY > 140 * uiScale && mouseY < 160 * uiScale) {
+    if (!activeTextField.equals("freq1")) {
+      activeTextField = "freq1";
+      ketaiKeyboard.show(this);
+      keyboardVisible = true;
+    }
+    cursorPosition = getCursorPosition(freq1Str, (int)(mouseX - 20 * uiScale), freq1Str);
+  }
+  // Check if the user tapped on the freq2 field
+  else if (mouseX > 20 * uiScale && mouseX < 320 * uiScale && mouseY > 180 * uiScale && mouseY < 200 * uiScale) {
+    if (!activeTextField.equals("freq2")) {
+      activeTextField = "freq2";
+      ketaiKeyboard.show(this);
+      keyboardVisible = true;
+    }
+    cursorPosition = getCursorPosition(freq2Str, (int)(mouseX - 20 * uiScale), freq2Str);
+  }
+  // Check if the user tapped on the freq3 field
+  else if (mouseX > 20 * uiScale && mouseX < 320 * uiScale && mouseY > 220 * uiScale && mouseY < 240 * uiScale) {
+    if (!activeTextField.equals("freq3")) {
+      activeTextField = "freq3";
+      ketaiKeyboard.show(this);
+      keyboardVisible = true;
+    }
+    cursorPosition = getCursorPosition(freq3Str, (int)(mouseX - 20 * uiScale), freq3Str);
+  }
+}
+
+void mouseReleased() {
+  isInteractingWithSlider = false; // Reset the flag when the mouse is released
+}
+
+// Handle keyboard input
 void keyPressed() {
-  if (keyCode == SHIFT) {
-    isShiftDown = true;
-  } else if (keyCode == LEFT) {
-    if (keyEvent.isControlDown()) {
-      pixelsPerSample = max(1, pixelsPerSample - 1); // Decrease pixels per sample
-      println("Pixels Per Sample: " + pixelsPerSample + " | Applied Pixels Per Sample: " + (baseNumSamples / pixelsPerSample));
-    }
-  } else if (keyCode == RIGHT) {
-    if (keyEvent.isControlDown()) {
-      pixelsPerSample++; // Increase pixels per sample
-      println("Pixels Per Sample: " + pixelsPerSample + " | Applied Pixels Per Sample: " + (baseNumSamples / pixelsPerSample));
-    }
-  } else if (key == 't' || key == 'T') {
-    adjustTimeScale = !adjustTimeScale;
-    println("Adjust Time Scale: " + adjustTimeScale);
-  } else if (keyCode == UP) {
-    if (keyEvent.isControlDown()) {
-      zoom *= 1.1; // Zoom in
-      println("Zoom: " + zoom);
-    }
-  } else if (keyCode == DOWN) {
-    if (keyEvent.isControlDown()) {
-      zoom /= 1.1; // Zoom out
-      println("Zoom: " + zoom);
-    }
-  } else if (keyEvent.isControlDown() && keyEvent.getKeyCode() == KeyEvent.VK_S) {
-    // Ctrl + S pressed
-    smoothLines = !smoothLines; // Toggle smooth lines
-    println("Smooth Lines: " + smoothLines);
-  } else if (keyEvent.isControlDown() && keyEvent.getKeyCode() == KeyEvent.VK_E) {
-    // Ctrl + E pressed
-    exportOBJ(); // Call export function
-  } else if (key == '+' || key == '=') {
-    timeMultiplier *= 1.1; // Increase animation speed
-    println("Time Multiplier: " + timeMultiplier);
-  } else if (key == '-' || key == '_') {
-    timeMultiplier /= 1.1; // Decrease animation speed
-    println("Time Multiplier: " + timeMultiplier);
-  } else if (keyEvent.isControlDown() && keyEvent.getKeyCode() == KeyEvent.VK_P) {
-    // Ctrl + P pressed
-    freezeTime = !freezeTime;
-    if (freezeTime) {
-      // Store the current time when freezing
-      frozenTime = millis() / 1000.0 * timeMultiplier;
-    }
-    println("Freeze Time: " + freezeTime);
-  } else if (key == TAB) {
-    // Toggle GUI visibility
-    guiVisible = !guiVisible;
-    if (guiVisible) {
-      cp5.show();
-    } else {
-      cp5.hide();
+  if (keyboardVisible) {
+    if (key == '\n' || key == ENTER) { // Enter key
+      ketaiKeyboard.hide(this);
+      keyboardVisible = false;
+      applyFunctions();
+    } else if (keyCode == DELETE || keyCode == BACKSPACE || keyCode == BACK) { // BACK for Android BACKSPACE key
+      if (activeTextField.equals("xFunction") && xFunctionStr.length() > 0 && cursorPosition > 0) {
+        xFunctionStr = xFunctionStr.substring(0, cursorPosition - 1) + xFunctionStr.substring(cursorPosition);
+        cursorPosition--;
+      } else if (activeTextField.equals("yFunction") && yFunctionStr.length() > 0 && cursorPosition > 0) {
+        yFunctionStr = yFunctionStr.substring(0, cursorPosition - 1) + yFunctionStr.substring(cursorPosition);
+        cursorPosition--;
+      } else if (activeTextField.equals("zFunction") && zFunctionStr.length() > 0 && cursorPosition > 0) {
+        zFunctionStr = zFunctionStr.substring(0, cursorPosition - 1) + zFunctionStr.substring(cursorPosition);
+        cursorPosition--;
+      } else if (activeTextField.equals("freq1") && freq1Str.length() > 0 && cursorPosition > 0) {
+        freq1Str = freq1Str.substring(0, cursorPosition - 1) + freq1Str.substring(cursorPosition);
+        cursorPosition--;
+      } else if (activeTextField.equals("freq2") && freq2Str.length() > 0 && cursorPosition > 0) {
+        freq2Str = freq2Str.substring(0, cursorPosition - 1) + freq2Str.substring(cursorPosition);
+        cursorPosition--;
+      } else if (activeTextField.equals("freq3") && freq3Str.length() > 0 && cursorPosition > 0) {
+        freq3Str = freq3Str.substring(0, cursorPosition - 1) + freq3Str.substring(cursorPosition);
+        cursorPosition--;
+      }
+    } else if (key != CODED) {
+      if (activeTextField.equals("xFunction")) {
+        xFunctionStr = xFunctionStr.substring(0, cursorPosition) + key + xFunctionStr.substring(cursorPosition);
+        cursorPosition++;
+      } else if (activeTextField.equals("yFunction")) {
+        yFunctionStr = yFunctionStr.substring(0, cursorPosition) + key + yFunctionStr.substring(cursorPosition);
+        cursorPosition++;
+      } else if (activeTextField.equals("zFunction")) {
+        zFunctionStr = zFunctionStr.substring(0, cursorPosition) + key + zFunctionStr.substring(cursorPosition);
+        cursorPosition++;
+      } else if (activeTextField.equals("freq1")) {
+        freq1Str = freq1Str.substring(0, cursorPosition) + key + freq1Str.substring(cursorPosition);
+        cursorPosition++;
+      } else if (activeTextField.equals("freq2")) {
+        freq2Str = freq2Str.substring(0, cursorPosition) + key + freq2Str.substring(cursorPosition);
+        cursorPosition++;
+      } else if (activeTextField.equals("freq3")) {
+        freq3Str = freq3Str.substring(0, cursorPosition) + key + freq3Str.substring(cursorPosition);
+        cursorPosition++;
+      }
     }
   }
 }
 
-void keyReleased() {
-  if (keyCode == SHIFT) {
-    isShiftDown = false;
-  }
+double truncate(double value, int decimalPlaces) {
+  double scale = Math.pow(10, decimalPlaces);
+  return Math.floor(value * scale) / scale;
 }
 
-// Handle mouse wheel events to adjust time scale
-void mouseWheel(MouseEvent event) {
-  if (adjustTimeScale) {
-    float e = event.getCount();
-    timeScale += e * 0.1;
-    timeScale = max(0.0, timeScale);
-    println("Time Scale: " + timeScale);
-  }
-}
+// Helper function to get cursor position based on mouse click
+int getCursorPosition(String text, int mouseX, String activeText) {
+  int pos = 0;
+  float textWidth = 0;
+  String staticPrefix = ""; // Static text prefix for each field
 
-// Function to export the waveform as an OBJ file
-void exportOBJ() {
-  // Open a save dialog to choose file location
-  selectOutput("Select location to save OBJ file:", "outputFileSelected");
-}
-
-// Callback function called when a file is selected
-void outputFileSelected(File selection) {
-  if (selection == null) {
-    // User canceled
-    println("Export canceled.");
-    return;
+  // Set the static prefix based on the active text field
+  if (activeTextField.equals("xFunction")) {
+    staticPrefix = "x(t): ";
+  } else if (activeTextField.equals("yFunction")) {
+    staticPrefix = "y(t): ";
+  } else if (activeTextField.equals("zFunction")) {
+    staticPrefix = "z(t): ";
+  } else if (activeTextField.equals("freq1")) {
+    staticPrefix = "freq1: ";
+  } else if (activeTextField.equals("freq2")) {
+    staticPrefix = "freq2: ";
+  } else if (activeTextField.equals("freq3")) {
+    staticPrefix = "freq3: ";
   }
 
-  String savePath = selection.getAbsolutePath();
+  // Calculate the width of the static prefix, scaled by uiScale
+  textSize(16 * uiScale); // Set the text size to match the scaled UI
+  float prefixWidth = textWidth(staticPrefix); // Width of the static prefix
 
-  PrintWriter output = createWriter(savePath);
+  // Adjust mouseX to account for the static prefix and scaling
+  mouseX -= (int)(20 * uiScale + prefixWidth); // 20 * uiScale is the starting x position of the text field
 
-  // Write OBJ header
-  output.println("# OBJ file exported from Processing");
+  // Apply the cursor offset (e.g., 60 pixels)
+  int cursorOffset = 60; // Adjust this value as needed
+  mouseX += cursorOffset;
 
-  // Check if smoothLines is true
-  if (smoothLines && xVertices.length >= 4) {
-    // Use higher resolution to approximate the smooth curve
-    int resolution = 10; // Increase for smoother curves
-    PVector[] interpolatedPoints = getInterpolatedCurvePoints(xVertices, yVertices, zVertices, resolution);
+  // Debug: Print touch coordinates and prefix width
+  println("Touch X: " + mouseX + ", Prefix Width: " + prefixWidth);
 
-    // Write interpolated vertices
-    for (int i = 0; i < interpolatedPoints.length; i++) {
-      PVector v = interpolatedPoints[i];
-      output.println("v " + v.x + " " + v.y + " " + v.z);
+  // Iterate through the text to find the cursor position
+  for (int i = 0; i < text.length(); i++) {
+    float charWidth = textWidth(text.charAt(i)); // Width of the current character
+    if (mouseX < textWidth + charWidth / 2) { // Check if the click is within the character's width
+      return i;
     }
-
-    // Write lines connecting the interpolated vertices
-    for (int i = 1; i < interpolatedPoints.length; i++) {
-      output.println("l " + i + " " + (i + 1));
-    }
-  } else {
-    // Write original vertices
-    for (int i = 0; i < xVertices.length; i++) {
-      output.println("v " + xVertices[i] + " " + yVertices[i] + " " + zVertices[i]);
-    }
-
-    // Write lines connecting the vertices
-    for (int i = 1; i < xVertices.length; i++) {
-      output.println("l " + i + " " + (i + 1));
-    }
+    textWidth += charWidth; // Add the character's width to the total width
   }
-
-  output.flush();
-  output.close();
-
-  println("Waveform exported to OBJ file: " + savePath);
-}
-
-// Function to generate interpolated points for the curve
-PVector[] getInterpolatedCurvePoints(float[] x, float[] y, float[] z, int resolution) {
-  ArrayList<PVector> points = new ArrayList<PVector>();
-
-  // Create control points arrays with two extra points
-  int n = x.length + 2;
-  float[] xCtrl = new float[n];
-  float[] yCtrl = new float[n];
-  float[] zCtrl = new float[n];
-
-  // Calculate first control point
-  if (x.length >= 2) {
-    xCtrl[0] = x[0] - (x[1] - x[0]);
-    yCtrl[0] = y[0] - (y[1] - y[0]);
-    zCtrl[0] = z[0] - (z[1] - z[0]);
-
-    // Copy original vertices
-    for (int i = 0; i < x.length; i++) {
-      xCtrl[i + 1] = x[i];
-      yCtrl[i + 1] = y[i];
-      zCtrl[i + 1] = z[i];
-    }
-
-    // Calculate last control point
-    int last = x.length - 1;
-    xCtrl[n - 1] = x[last] + (x[last] - x[last - 1]);
-    yCtrl[n - 1] = y[last] + (y[last] - y[last - 1]);
-    zCtrl[n - 1] = z[last] + (z[last] - z[last - 1]);
-  } else {
-    // Not enough points; duplicate
-    xCtrl[0] = xCtrl[1] = xCtrl[2] = x[0];
-    yCtrl[0] = yCtrl[1] = yCtrl[2] = y[0];
-    zCtrl[0] = zCtrl[1] = zCtrl[2] = z[0];
-  }
-
-  // Generate interpolated points
-  for (int i = 1; i < n - 2; i++) {
-    for (int j = 0; j <= resolution; j++) {
-      float t = j / (float) resolution;
-      float interpolatedX = curvePoint(xCtrl[i - 1], xCtrl[i], xCtrl[i + 1], xCtrl[i + 2], t);
-      float interpolatedY = curvePoint(yCtrl[i - 1], yCtrl[i], yCtrl[i + 1], yCtrl[i + 2], t);
-      float interpolatedZ = curvePoint(zCtrl[i - 1], zCtrl[i], zCtrl[i + 1], zCtrl[i + 2], t);
-      points.add(new PVector(interpolatedX, interpolatedY, interpolatedZ));
-    }
-  }
-
-  return points.toArray(new PVector[points.size()]);
+  return text.length(); // If the click is beyond the text, return the end position
 }
 
 // Helper function to parse frequency from text field
@@ -751,6 +744,185 @@ double parseFrequency(String text, double defaultValue) {
   }
 }
 
+void touchStarted() {
+  if (touches.length == 1) {
+    // Check if the touch is within the bounds of any slider
+    for (Slider slider : new Slider[] { freq1Slider, freq2Slider, freq3Slider, sampleSlider, timeMultiplierSlider }) {
+      if (isInsideSlider(slider, touches[0].x, touches[0].y)) {
+        activeSlider = slider;
+        isInteractingWithSlider = true; // Set the interaction flag
+
+        // Enlarge the slider if the toggle is on
+        if (cp5.getController("enlargeSlidersToggle").getValue() == 1) {
+          if (slider == timeMultiplierSlider) {
+            // Hide the original slider and show the enlarged one
+            timeMultiplierSlider.setVisible(false);
+            enlargedTimeMultiplierSlider.setPosition(
+              (int)(250 * uiScale), // x position remains the same
+              (int)(200 * uiScale + originalSliderHeight - enlargedSliderHeight - 280) // y position adjusted to align bottom edges
+            );
+            enlargedTimeMultiplierSlider.setVisible(true);
+            activeSlider = enlargedTimeMultiplierSlider; // Set the active slider to the enlarged one
+          } else {
+            // For other sliders, just resize them
+            slider.setSize((int)enlargedSliderWidth, (int)enlargedSliderHeight);
+          }
+        }
+        break;
+      }
+    }
+
+    // Explicitly check for buttons and toggles
+    checkButtonOrToggle("applyFunctions", touches[0].x, touches[0].y);
+    checkButtonOrToggle("smoothLines", touches[0].x, touches[0].y);
+    checkButtonOrToggle("freezeTimeToggle", touches[0].x, touches[0].y);
+    checkButtonOrToggle("enlargeSlidersToggle", touches[0].x, touches[0].y);
+  }
+
+  // Handle other touch interactions (e.g., pinch-to-zoom, rotation)
+  if (touches.length == 3) {
+    // Toggle GUI visibility and custom fields visibility
+    touchInteractionMode = 3;
+    guiVisible = !guiVisible;
+    customFieldsVisible = !customFieldsVisible;
+    if (guiVisible) {
+      cp5.show();
+    } else {
+      cp5.hide();
+    }
+  } else if (touches.length == 2 && touchInteractionMode != 3) {
+    // Start pinch-to-zoom
+    touchInteractionMode = 1;
+    initialPinchDistance = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+    initialZoom = zoom; // Store the initial zoom level
+  } else if (touches.length == 1 && touchInteractionMode != 1 && touchInteractionMode != 3) {
+    // Start rotation
+    touchInteractionMode = 2;
+    lastMouseX = (int) touches[0].x;
+    lastMouseY = (int) touches[0].y;
+  }
+}
+
+// Helper function to check if a touch is inside a button or toggle
+void checkButtonOrToggle(String name, float x, float y) {
+  Controller<?> controller = cp5.getController(name);
+  if (controller != null) {
+    if (controller instanceof Button || controller instanceof Toggle) {
+      float controllerX = controller.getPosition()[0];
+      float controllerY = controller.getPosition()[1];
+      float controllerWidth = controller.getWidth();
+      float controllerHeight = controller.getHeight();
+
+      // Debug: Print controller bounds
+      //println("Controller: " + name + " at (" + controllerX + ", " + controllerY + ") with size (" + controllerWidth + ", " + controllerHeight + ")");
+
+      if (x >= controllerX && x <= controllerX + controllerWidth && y >= controllerY && y <= controllerY + controllerHeight) {
+        // Debug: Print controller names
+        //println("Controller pressed: " + name);
+        if (controller instanceof Button) {
+          ((Button) controller).setValue(1); // Simulate a button press
+        } else if (controller instanceof Toggle) {
+          // Toggle the value of the specific toggle
+          Toggle toggle = (Toggle) controller;
+          toggle.setValue(!toggle.getBooleanValue()); // Toggle the state
+        }
+      }
+    }
+  }
+}
+
+void touchMoved() {
+  if (activeSlider != null && touches.length == 1) {
+    // Update the slider value based on touch position
+    float newValue = getSliderValueFromPosition(activeSlider, touches[0].x, touches[0].y);
+    activeSlider.setValue(newValue);
+  }
+
+  // Handle other touch interactions (e.g., pinch-to-zoom, rotation)
+  if (touchInteractionMode == 1 && touches.length == 2) {
+    // Pinch-to-zoom
+    float currentPinchDistance = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
+    zoom = initialZoom * (currentPinchDistance / initialPinchDistance);
+    zoom = constrain(zoom, 0.1, 10); // Constrain zoom to a reasonable range
+  } else if (touchInteractionMode == 2 && touches.length == 1 && !isInteractingWithSlider) {
+    // Rotation (only if not interacting with a slider)
+    int currentMouseX = (int) touches[0].x;
+    int currentMouseY = (int) touches[0].y;
+
+    float deltaX = currentMouseX - lastMouseX;
+    float deltaY = currentMouseY - lastMouseY;
+
+    if (deltaX != 0 || deltaY != 0) {
+      rotationY += deltaX * 0.01; // Adjust sensitivity as needed
+      rotationX += deltaY * 0.01;
+    }
+
+    lastMouseX = currentMouseX;
+    lastMouseY = currentMouseY;
+  }
+}
+
+void touchEnded() {
+  if (activeSlider != null) {
+    // Restore the slider to its original size if the toggle is on
+    if (cp5.getController("enlargeSlidersToggle").getValue() == 1) {
+      if (activeSlider == enlargedTimeMultiplierSlider) {
+        // Copy the value from the enlarged slider to the original slider
+        timeMultiplierSlider.setValue(enlargedTimeMultiplierSlider.getValue());
+        
+        // Hide the enlarged slider and show the original one
+        enlargedTimeMultiplierSlider.setVisible(false);
+        timeMultiplierSlider.setVisible(true);
+      } else {
+        // For other sliders, restore their original size
+        activeSlider.setSize((int)originalSliderWidth, (int)originalSliderHeight);
+      }
+    }
+    activeSlider = null; // Reset the active slider
+    isInteractingWithSlider = false; // Reset the interaction flag
+  }
+
+  // Reset the touch interaction mode when all touches are released
+  if (touches.length == 0) {
+    touchInteractionMode = 0;
+  }
+}
+
+boolean isInsideSlider(Slider slider, float x, float y) {
+  float sliderX = slider.getPosition()[0];
+  float sliderY = slider.getPosition()[1];
+  float sliderWidth = slider.getWidth();
+  float sliderHeight = slider.getHeight();
+  return x >= sliderX && x <= sliderX + sliderWidth && y >= sliderY && y <= sliderY + sliderHeight;
+}
+
+float getSliderValueFromPosition(Slider slider, float x, float y) {
+  float sliderX = slider.getPosition()[0];
+  float sliderY = slider.getPosition()[1];
+  float sliderWidth = slider.getWidth();
+  float sliderHeight = slider.getHeight();
+  float minValue = slider.getMin();
+  float maxValue = slider.getMax();
+
+  if (slider.getSliderMode() == Slider.FLEXIBLE) {
+    // Vertical slider: use y-coordinate (inverted)
+    float normalizedValue = 1.0 - ((y - sliderY) / sliderHeight);
+    return minValue + normalizedValue * (maxValue - minValue);
+  } else {
+    // Horizontal slider: use x-coordinate
+    float normalizedValue = (x - sliderX) / sliderWidth;
+    return minValue + normalizedValue * (maxValue - minValue);
+  }
+}
+
+boolean isInsideButton(Button button, float x, float y) {
+  float buttonX = button.getPosition()[0];
+  float buttonY = button.getPosition()[1];
+  float buttonWidth = button.getWidth();
+  float buttonHeight = button.getHeight();
+  return x >= buttonX && x <= buttonX + buttonWidth && y >= buttonY && y <= buttonY + buttonHeight;
+}
+
 // ControlP5 event handler
 void controlEvent(ControlEvent theEvent) {
   // Do not process events until controllers are fully initialized
@@ -758,150 +930,28 @@ void controlEvent(ControlEvent theEvent) {
 
   String name = theEvent.getName();
 
-  if (name.equals("freq1Field")) {
-    freq1 = parseFrequency(cp5.get(Textfield.class, "freq1Field").getText(), freq1);
+  if (name.equals("freq1Multiplier") || name.equals("freq2Multiplier") || name.equals("freq3Multiplier") || name.equals("numSamplesMultiplier") || name.equals("timeMultiplier") || name.equals("enlargedTimeMultiplier")) {
+    isInteractingWithSlider = true; // Set the flag when interacting with a slider
 
-    // Update freq1Slider without triggering controlEvent
-    cp5.getController("freq1Slider").setBroadcast(false);
-    cp5.getController("freq1Slider").setValue((float) freq1);
-    cp5.getController("freq1Slider").setBroadcast(true);
-
-    // Update freq1Field to ensure it displays the correct value
-    cp5.get(Textfield.class, "freq1Field").setText(String.format("%.10f", freq1));
-
-    if (!independentFreqs) {
-      freq2 = freq1;
-      freq3 = freq1;
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-
-      // Update freq2Slider and freq3Slider without triggering controlEvent
-      cp5.getController("freq2Slider").setBroadcast(false);
-      cp5.getController("freq2Slider").setValue((float) freq2);
-      cp5.getController("freq2Slider").setBroadcast(true);
-
-      cp5.getController("freq3Slider").setBroadcast(false);
-      cp5.getController("freq3Slider").setValue((float) freq3);
-      cp5.getController("freq3Slider").setBroadcast(true);
+    if (name.equals("freq1Multiplier")) {
+      freq1 = truncate(baseFreq1 * theEvent.getController().getValue(), decimalPlaces); // Multiply base frequency by slider value and truncate
+    } else if (name.equals("freq2Multiplier")) {
+      freq2 = truncate(baseFreq2 * theEvent.getController().getValue(), decimalPlaces); // Multiply base frequency by slider value and truncate
+    } else if (name.equals("freq3Multiplier")) {
+      freq3 = truncate(baseFreq3 * theEvent.getController().getValue(), decimalPlaces); // Multiply base frequency by slider value and truncate
+    } else if (name.equals("numSamplesMultiplier")) {
+      // Update the number of samples to draw based on the multiplier
+      int numSamplesToDraw = max(1, (int)(baseNumSamples / pixelsPerSample * theEvent.getController().getValue()));
+    } else if (name.equals("timeMultiplier") || name.equals("enlargedTimeMultiplier")) {
+      // Update the timeMultiplier based on the slider's value
+      timeMultiplier = map(theEvent.getController().getValue(), 0.1, 10.0, 0.1, 10.0);
     }
-  } else if (name.equals("freq2Field")) {
-    if (independentFreqs) {
-      freq2 = parseFrequency(cp5.get(Textfield.class, "freq2Field").getText(), freq2);
-
-      // Update freq2Slider without triggering controlEvent
-      cp5.getController("freq2Slider").setBroadcast(false);
-      cp5.getController("freq2Slider").setValue((float) freq2);
-      cp5.getController("freq2Slider").setBroadcast(true);
-
-      // Update freq2Field to ensure it displays the correct value
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-    } else {
-      // Reset freq2 to match freq1
-      freq2 = freq1;
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-    }
-  } else if (name.equals("freq3Field")) {
-    if (independentFreqs) {
-      freq3 = parseFrequency(cp5.get(Textfield.class, "freq3Field").getText(), freq3);
-
-      // Update freq3Slider without triggering controlEvent
-      cp5.getController("freq3Slider").setBroadcast(false);
-      cp5.getController("freq3Slider").setValue((float) freq3);
-      cp5.getController("freq3Slider").setBroadcast(true);
-
-      // Update freq3Field to ensure it displays the correct value
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-    } else {
-      // Reset freq3 to match freq1
-      freq3 = freq1;
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-    }
-  } else if (name.equals("freq1Slider")) {
-    freq1 = theEvent.getController().getValue();
-
-    // Update freq1Field to ensure it displays the correct value
-    cp5.get(Textfield.class, "freq1Field").setText(String.format("%.10f", freq1));
-
-    if (!independentFreqs) {
-      freq2 = freq1;
-      freq3 = freq1;
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-
-      // Update freq2Slider and freq3Slider without triggering controlEvent
-      cp5.getController("freq2Slider").setBroadcast(false);
-      cp5.getController("freq2Slider").setValue((float) freq2);
-      cp5.getController("freq2Slider").setBroadcast(true);
-
-      cp5.getController("freq3Slider").setBroadcast(false);
-      cp5.getController("freq3Slider").setValue((float) freq3);
-      cp5.getController("freq3Slider").setBroadcast(true);
-    }
-  } else if (name.equals("freq2Slider")) {
-    if (independentFreqs) {
-      freq2 = theEvent.getController().getValue();
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-    } else {
-      // Reset freq2 to match freq1
-      freq2 = freq1;
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-    }
-  } else if (name.equals("freq3Slider")) {
-    if (independentFreqs) {
-      freq3 = theEvent.getController().getValue();
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-    } else {
-      // Reset freq3 to match freq1
-      freq3 = freq1;
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-    }
-  } else if (name.equals("independentFreqs")) {
-    independentFreqs = cp5.get(Toggle.class, "independentFreqs").getState();
-
-    // Enable or disable freq2 and freq3 fields and sliders
-    cp5.get(Textfield.class, "freq2Field").setLock(!independentFreqs);
-    cp5.get(Textfield.class, "freq3Field").setLock(!independentFreqs);
-    cp5.getController("freq2Slider").setLock(!independentFreqs);
-    cp5.getController("freq3Slider").setLock(!independentFreqs);
-
-    if (!independentFreqs) {
-      // Synchronize frequencies
-      freq2 = freq1;
-      freq3 = freq1;
-      cp5.get(Textfield.class, "freq2Field").setText(String.format("%.10f", freq2));
-      cp5.get(Textfield.class, "freq3Field").setText(String.format("%.10f", freq3));
-
-      // Update freq2Slider and freq3Slider without triggering controlEvent
-      cp5.getController("freq2Slider").setBroadcast(false);
-      cp5.getController("freq2Slider").setValue((float) freq2);
-      cp5.getController("freq2Slider").setBroadcast(true);
-
-      cp5.getController("freq3Slider").setBroadcast(false);
-      cp5.getController("freq3Slider").setValue((float) freq3);
-      cp5.getController("freq3Slider").setBroadcast(true);
-    }
-  } else if (name.equals("applyTimeScaleX")) {
-    applyTimeScaleX = cp5.get(Toggle.class, "applyTimeScaleX").getState();
-  } else if (name.equals("applyTimeScaleY")) {
-    applyTimeScaleY = cp5.get(Toggle.class, "applyTimeScaleY").getState();
-  } else if (name.equals("applyTimeScaleZ")) {
-    applyTimeScaleZ = cp5.get(Toggle.class, "applyTimeScaleZ").getState();
-  } else if (name.equals("Pixels Per Sample")) {
-    baseNumSamples = parseInt(cp5.get(Textfield.class, "Pixels Per Sample").getText(), baseNumSamples);
-    baseNumSamples = max(1, baseNumSamples);
-    cp5.get(Textfield.class, "Pixels Per Sample").setText(str(baseNumSamples));
-  } else if (name.equals("spoutOutput")) {
-    spoutOutput = cp5.get(Toggle.class, "spoutOutput").getState();
   }
 }
 
-// Override the stop function to release Spout senders
-void stop() {
-  if (spout != null) {
-    spout.closeSender(); // Close main Spout sender
+void onDestroy() {
+  // Release the WakeLock
+  if (wakeLock != null && wakeLock.isHeld()) {
+    wakeLock.release();
   }
-  if (spoutInfo != null) {
-    spoutInfo.closeSender(); // Close consolidated Info Spout sender
-  }
-  super.stop();
 }
